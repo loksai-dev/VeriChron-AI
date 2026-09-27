@@ -20,6 +20,9 @@ EntityType = Literal[
     "JiraTicket",
     "Person",
     "Organization",
+    "Exception",
+    "PolicyVersion",
+    "Audit",
 ]
 
 
@@ -48,6 +51,7 @@ class GraphNode(BaseModel):
     system_start: Optional[date] = None
     system_end: Optional[date] = None
     sources: list[str] = Field(default_factory=list)
+    tenant_id: Optional[str] = None
 
 
 class GraphEdge(BaseModel):
@@ -203,11 +207,31 @@ class QueryRequest(BaseModel):
     valid_as_of: Optional[date] = None
     system_as_of: Optional[date] = None
     framework: str = "SOC 2"
+    memory_enabled: bool = True
+    use_legacy_agent: bool = False
 
 
 class ReconstructRequest(BaseModel):
     valid_as_of: date
     system_as_of: date
+    framework: str = "SOC 2"
+
+
+class MemoryRetainRequest(BaseModel):
+    content: str
+    context: str = "api"
+
+
+class MemoryRecallRequest(BaseModel):
+    query: str
+    valid_as_of: Optional[date] = None
+    system_as_of: Optional[date] = None
+
+
+class CompareRequest(BaseModel):
+    valid_from: date
+    valid_to: date
+    system_as_of: Optional[date] = None
     framework: str = "SOC 2"
 
 
@@ -240,6 +264,13 @@ class AgentAnswer(BaseModel):
     known_at_query_time: bool = True
     caveat: Optional[str] = None
     run: Optional[AgentRun] = None
+    memories_used: list[dict[str, Any]] = Field(default_factory=list)
+    intent: Optional[str] = None
+    selected_tools: list[str] = Field(default_factory=list)
+    valid_as_of: Optional[date] = None
+    system_as_of: Optional[date] = None
+    memory_source: Optional[str] = None
+    orchestrator: Optional[str] = None
 
 
 class OverviewMetrics(BaseModel):

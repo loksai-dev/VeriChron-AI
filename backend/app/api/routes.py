@@ -7,9 +7,12 @@ from fastapi.responses import StreamingResponse
 
 from app.data import demo
 from app.models.schemas import (
+    CompareRequest,
     ControlGapRow,
     GapCell,
     IngestRequest,
+    MemoryRecallRequest,
+    MemoryRetainRequest,
     OverviewMetrics,
     QueryRequest,
     ReconstructRequest,
@@ -18,16 +21,47 @@ from app.services.factory import get_services
 
 router = APIRouter()
 _agent = None
+_openclaw = None
 _ingest = None
 
 
-def agent():
+def legacy_agent():
+    """Explicit legacy ComplianceAgent.iter_query path (not OpenClaw)."""
     global _agent
     if _agent is None:
         from app.agents.pipeline import ComplianceAgent
 
         _agent = ComplianceAgent(get_services())
     return _agent
+
+
+def openclaw_agent():
+    global _openclaw
+    if _openclaw is None:
+        from app.openclaw.agent import OpenClawInvestigationAgent
+        from app.openclaw.client import OpenClawGatewayClient
+
+        svc = get_services()
+        _openclaw = OpenClawInvestigationAgent(svc, OpenClawGatewayClient(svc.settings))
+    return _openclaw
+
+
+def resolve_agent(req: QueryRequest):
+    settings = get_services().settings
+    if req.use_legacy_agent or (not settings.openclaw_enabled and settings.openclaw_legacy_fallback):
+        return legacy_agent(), "legacy"
+    if settings.openclaw_enabled:
+        oc = openclaw_agent()
+        if oc.client.health().get("status") == "connected":
+            return oc, "openclaw"
+        return legacy_agent(), "legacy-openclaw-down"
+    if settings.openclaw_legacy_fallback:
+        return legacy_agent(), "legacy"
+    return None, "disabled"
+
+
+def agent():
+    return legacy_agent()
 
 
 def ingest():
@@ -49,6 +83,43 @@ def system_status():
     return get_services().system_status()
 
 
+@router.post("/memory/retain")
+def memory_retain(req: MemoryRetainRequest):
+    h = get_services().hindsight
+    if not getattr(h, "is_live", lambda: False)():
+        raise HTTPException(503, "Hindsight is not connected (MOCK MODE is not used for this API)")
+    return h.retain(req.content, context=req.context, timestamp=None, document_id=None, metadata={"source": "api"})
+
+
+@router.post("/memory/recall")
+def memory_recall(req: MemoryRecallRequest):
+    h = get_services().hindsight
+    if not getattr(h, "is_live", lambda: False)():
+        raise HTTPException(503, "Hindsight is not connected")
+    return h.recall(req.query, valid_as_of=req.valid_as_of, system_as_of=req.system_as_of)
+
+
+@router.post("/memory/reflect")
+def memory_reflect(req: MemoryRecallRequest):
+    h = get_services().hindsight
+    if not getattr(h, "is_live", lambda: False)():
+        raise HTTPException(503, "Hindsight is not connected")
+    return h.reflect(req.query, valid_as_of=req.valid_as_of, system_as_of=req.system_as_of)
+
+
+@router.post("/audit/compare")
+def audit_compare(req: CompareRequest):
+    from app.agents.tools import AgentToolbox
+
+    tools = AgentToolbox(get_services())
+    return tools.compare_temporal_states(
+        question="",
+        valid_from=req.valid_from.isoformat(),
+        valid_to=req.valid_to.isoformat(),
+        system_as_of=(req.system_as_of or req.valid_to).isoformat(),
+    )
+
+
 @router.post("/ingest")
 async def ingest_json(req: IngestRequest):
     return ingest().ingest(req)
@@ -62,13 +133,33 @@ async def ingest_upload(file: UploadFile = File(...)):
 
 @router.post("/query")
 def query(req: QueryRequest):
-    return agent().query(req.question, req.valid_as_of, req.system_as_of, req.framework)
+    impl, mode = resolve_agent(req)
+    if impl is None:
+        raise HTTPException(503, "OpenClaw is the primary orchestrator and is disabled; legacy fallback is off.")
+    if mode == "openclaw":
+        return impl.query(req.question, req.valid_as_of, req.system_as_of, req.framework, memory_enabled=req.memory_enabled)
+    return impl.query(req.question, req.valid_as_of, req.system_as_of, req.framework)
 
 
 @router.post("/query/stream")
 def query_stream(req: QueryRequest):
+    impl, mode = resolve_agent(req)
+    if impl is None:
+        raise HTTPException(503, "OpenClaw is the primary orchestrator and is disabled; legacy fallback is off.")
+
     def events():
-        for evt in agent().iter_query(req.question, req.valid_as_of, req.system_as_of, req.framework):
+        kwargs = {}
+        if mode == "openclaw":
+            gen = impl.iter_query(req.question, req.valid_as_of, req.system_as_of, req.framework, memory_enabled=req.memory_enabled)
+        else:
+            note = (
+                "OpenClaw gateway is disconnected. Using the live FastAPI agent (Neo4j + Hindsight Cloud + Groq). Not mock memory."
+                if mode == "legacy-openclaw-down"
+                else "LEGACY PATH: ComplianceAgent.iter_query (OpenClaw not used for this request)."
+            )
+            yield f"data: {json.dumps({'type': 'thought', 'text': note}, default=str)}\n\n"
+            gen = impl.iter_query(req.question, req.valid_as_of, req.system_as_of, req.framework)
+        for evt in gen:
             yield f"data: {json.dumps(evt, default=str)}\n\n"
 
     return StreamingResponse(
@@ -173,12 +264,22 @@ def refresh_model(model_id: str):
 
 @router.get("/agent-runs")
 def agent_runs():
-    return agent().runs
+    settings = get_services().settings
+    if settings.openclaw_enabled:
+        try:
+            return openclaw_agent().runs + legacy_agent().runs
+        except Exception:
+            return legacy_agent().runs
+    return legacy_agent().runs
 
 
 @router.get("/agent/runs/{run_id}")
 def agent_run(run_id: str):
-    item = agent().run_index.get(run_id)
+    item = None
+    if get_services().settings.openclaw_enabled:
+        item = openclaw_agent().run_index.get(run_id)
+    if not item:
+        item = legacy_agent().run_index.get(run_id)
     if not item:
         raise HTTPException(404, "Run not found")
     return item
@@ -191,25 +292,69 @@ def neo4j_stats():
 
 @router.get("/overview")
 def overview():
-    open_findings = [f for f in demo.FINDINGS if f.status == "open"]
+    svc = get_services()
+    g = svc.neo4j.graph(None, date(2025, 7, 15), date(2025, 7, 15), None)
+    controls = [n for n in g.nodes if n.type == "Control"]
+    findings = [n for n in g.nodes if n.type == "AuditFinding"]
+    evidence = [n for n in g.nodes if n.type == "Evidence"]
+    remediations = [n for n in g.nodes if n.type == "Remediation"]
+    open_findings = [f for f in findings if (f.status or "") not in {"remediated", "complete", "done"}]
+    good = [c for c in controls if (c.status or "") in {"compliant", "remediated"}]
+    overall = (len(good) / len(controls)) if controls else 0.0
+    coverage = (len(evidence) / max(len(controls) * 2, 1))
+    coverage = min(1.0, coverage)
+    reqs = [n for n in g.nodes if n.type == "Requirement"]
+    matrix = []
+    for r in reqs:
+        matrix.append(
+            ControlGapRow(
+                requirement_id=r.id,
+                name=r.name,
+                cells=GapCell(
+                    current="unknown",
+                    last_audit="unknown",
+                    evidence="partial" if evidence else "missing",
+                    finding=open_findings[0].id if open_findings else None,
+                    remediation=remediations[0].id if remediations else None,
+                ),
+            )
+        )
+    live_facts = []
+    try:
+        live_facts = svc.hindsight.facts() or []
+    except Exception:
+        live_facts = []
     return {
         "metrics": OverviewMetrics(
-            overall_compliance=0.91,
+            overall_compliance=round(overall, 2),
             framework="SOC 2",
-            active_controls=len(demo.CONTROLS),
+            active_controls=len(controls),
             open_findings=len(open_findings),
-            critical_findings=sum(1 for f in open_findings if f.severity == "critical"),
-            pending_remediations=sum(1 for n in demo.NODES if n.type == "Remediation" and n.status != "complete"),
-            evidence_coverage=0.88,
-            as_of=demo.AS_OF_CURRENT,
+            critical_findings=sum(1 for f in findings if "critical" in f"{f.name} {f.status}".lower()),
+            pending_remediations=sum(1 for n in remediations if (n.status or "") != "complete"),
+            evidence_coverage=round(coverage, 2),
+            as_of=date(2025, 7, 15),
         ),
-        "series": demo.POSTURE_SERIES,
-        "recent_changes": [e.model_dump(mode="json") for e in demo.TIMELINE[-4:]],
-        "matrix": [
-            ControlGapRow(requirement_id="CC6.1", name="Logical Access", cells=GapCell(current="remediated", last_audit="non_compliant", evidence="complete", finding="F-MFA", remediation="REM-MFA")),
-            ControlGapRow(requirement_id="CC6.2", name="Credentials / PAM", cells=GapCell(current="at_risk", last_audit="compliant", evidence="partial", finding="F-PAM", remediation="REM-PAM")),
-            ControlGapRow(requirement_id="CC7.1", name="Detection", cells=GapCell(current="compliant", last_audit="compliant", evidence="complete")),
-            ControlGapRow(requirement_id="CC7.2", name="Monitoring", cells=GapCell(current="compliant", last_audit="compliant", evidence="complete")),
+        "source": getattr(svc.neo4j, "source", "unknown"),
+        "memory_count": len(live_facts),
+        "evidence_count": len(evidence),
+        "series": [
+            {"date": n.valid_start.isoformat() if getattr(n, "valid_start", None) else "", "compliance": 70, "known": 65}
+            for n in sorted((x for x in g.nodes if x.type == "Evidence" and x.valid_start), key=lambda x: x.valid_start)[:12]
+        ]
+        or demo.POSTURE_SERIES,
+        "recent_changes": [
+            {"id": n.id, "title": n.name, "valid_start": n.valid_start.isoformat() if n.valid_start else ""}
+            for n in evidence[-4:]
+        ],
+        "matrix": matrix
+        or [
+            ControlGapRow(
+                requirement_id=c.id,
+                name=c.name,
+                cells=GapCell(current="unknown", last_audit="unknown", evidence="partial"),
+            )
+            for c in controls[:6]
         ],
     }
 

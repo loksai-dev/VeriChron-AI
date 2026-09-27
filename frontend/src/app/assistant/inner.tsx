@@ -9,10 +9,11 @@ import { fmtDate } from "@/lib/utils";
 import { StatusPill } from "@/components/ui/primitives";
 
 const PRESETS = [
+  "Remember that the ACME MFA exception was approved by the security team on June 20, 2025 because of the legacy authentication dependency.",
+  "What was the reason for the ACME MFA exception?",
+  "Does that exception affect the CC6.1 compliance assessment?",
   "What was our compliance posture on May 15, 2025?",
-  "Why was CC6.1 non-compliant?",
-  "Show me what changed between May 15 and June 25.",
-  "Show me all unresolved SOC 2 compliance findings.",
+  "What happened to PAM-01?",
 ];
 
 type ToolRow = { name: string; status: "running" | "done"; summary?: string; ms?: number; input?: any };
@@ -30,6 +31,7 @@ export default function AssistantInner() {
   const { validAsOf, systemAsOf } = useAppState();
   const [q, setQ] = useState(params.get("q") || "");
   const [turns, setTurns] = useState<Turn[]>([]);
+  const [memoryOn, setMemoryOn] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
@@ -54,9 +56,10 @@ export default function AssistantInner() {
       await streamQuery(
         {
           question: text,
-          valid_as_of: /may 15/i.test(text) ? "2025-05-15" : validAsOf,
-          system_as_of: /may 15/i.test(text) ? "2025-05-15" : systemAsOf,
+          valid_as_of: /^remember/i.test(text) ? undefined : /may 15/i.test(text) ? "2025-05-15" : validAsOf,
+          system_as_of: /^remember/i.test(text) ? undefined : /may 15/i.test(text) ? "2025-05-15" : systemAsOf,
           framework: "SOC 2",
+          memory_enabled: memoryOn,
         },
         (evt) => {
           if (evt.type === "thought") {
@@ -107,10 +110,14 @@ export default function AssistantInner() {
         <Terminal className="h-4 w-4 text-ink-400" />
         <div>
           <div className="text-[14px]">Compliance agent</div>
-          <div className="text-[11px] text-ink-400">Live tool loop — you watch Neo4j, Hindsight, and reconstruction happen</div>
+          <div className="text-[11px] text-ink-400">OpenClaw orchestration · Neo4j tools · Hindsight Cloud</div>
         </div>
+        <label className="ml-auto text-[11px] text-ink-400 inline-flex items-center gap-1.5">
+          <input type="checkbox" checked={memoryOn} onChange={(e) => setMemoryOn(e.target.checked)} />
+          Hindsight recall
+        </label>
         {busy && (
-          <div className="ml-auto text-[12px] text-ink-400 inline-flex items-center gap-1.5">
+          <div className="text-[12px] text-ink-400 inline-flex items-center gap-1.5">
             <Loader2 className="h-3.5 w-3.5 animate-spin" /> Agent working
           </div>
         )}
@@ -126,6 +133,16 @@ export default function AssistantInner() {
                   {p}
                 </button>
               ))}
+            </div>
+            <div className="grid grid-cols-2 gap-3 mt-6 text-[12px]">
+              <div className="border border-white/10 rounded p-3">
+                <div className="uppercase text-ink-400 mb-1">Without Hindsight</div>
+                <p className="text-ink-300">The agent would lack prior operator facts (exception rationale). Graph + time still apply; historical “why we approved” is missing.</p>
+              </div>
+              <div className="border border-white/10 rounded p-3">
+                <div className="uppercase text-ink-400 mb-1">With Hindsight</div>
+                <p className="text-ink-300">Use Remember… then ask the reason. Recalled memories appear as MEMORY CONTEXT in Groq and in the Memory inspector (Used in answer YES/NO).</p>
+              </div>
             </div>
           </div>
         )}
@@ -165,7 +182,21 @@ export default function AssistantInner() {
                     <StatusPill value={turn.answer.compliance_status} />
                     <span className="text-[12px] text-ink-400">{Math.round(turn.answer.confidence * 100)}% · {turn.answer.run?.id}</span>
                   </div>
+                  {turn.answer.intent && (
+                    <p className="text-[11px] text-ink-400">Intent {turn.answer.intent} · tools {(turn.answer.selected_tools || []).join(", ")} · valid {turn.answer.valid_as_of} / system {turn.answer.system_as_of}</p>
+                  )}
                   <p className="text-[14px] leading-relaxed">{turn.answer.conclusion}</p>
+                  {(turn.answer.memories_used || []).length > 0 && (
+                    <div className="rounded border border-white/10 p-2 space-y-1">
+                      <div className="text-[11px] uppercase text-ink-400">Memory inspector (Hindsight)</div>
+                      {(turn.answer.memories_used as any[]).map((m) => (
+                        <div key={m.memory_id || m.text} className="text-[11px] font-mono text-ink-300">
+                          {m.memory_id} · used={m.used_in_answer ? "YES" : "NO"} · {m.source} · {m.kind || "recall"}
+                          <div className="text-ink-400 font-sans pl-2">{(m.text || "").slice(0, 180)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {turn.answer.caveat && <p className="text-[12px] text-status-warn">{turn.answer.caveat}</p>}
                   {turn.answer.root_cause && (
                     <p className="text-[13px]"><span className="text-ink-400">Root cause · </span>{turn.answer.root_cause}</p>

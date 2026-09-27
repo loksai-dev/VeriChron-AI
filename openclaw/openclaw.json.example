@@ -1,0 +1,49 @@
+{
+  "gateway": {
+    "bind": "loopback",
+    "port": 18789,
+    "auth": {
+      "mode": "token"
+    },
+    "http": {
+      "endpoints": {
+        "chatCompletions": { "enabled": true }
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": { "primary": "groq/openai/gpt-oss-120b" },
+      "workspace": "./skills"
+    }
+  },
+  "tools": {
+    "allow": ["verichron-openclaw"],
+    "deny": ["exec", "process", "spawn", "shell"]
+  },
+  "plugins": {
+    "entries": {
+      "hindsight-openclaw": {
+        "enabled": true,
+        "config": {
+          "hindsightApiUrl": "https://api.hindsight.vectorize.io",
+          "dynamicBankId": false,
+          "bankId": "REPLACE_WITH_HINDSIGHT_BANK_ID",
+          "autoRecall": true,
+          "autoRetain": true,
+          "retainRoles": ["user"],
+          "enableKnowledgeTools": true,
+          "recallMaxTokens": 1024,
+          "recallBudget": "mid",
+          "bankIdPrefix": "verichron"
+        }
+      },
+      "verichron-openclaw": {
+        "enabled": true,
+        "config": {
+          "apiBase": "http://127.0.0.1:8000"
+        }
+      }
+    }
+  }
+}

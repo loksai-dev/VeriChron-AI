@@ -57,6 +57,13 @@ export type AgentAnswer = {
   graph_path: string[];
   caveat?: string | null;
   run?: AgentRun | null;
+  memories_used?: any[];
+  intent?: string | null;
+  selected_tools?: string[];
+  valid_as_of?: string | null;
+  system_as_of?: string | null;
+  memory_source?: string | null;
+  orchestrator?: string | null;
 };
 
 export type GraphNode = {
@@ -155,4 +162,6 @@ export const api = {
   ingest: (body: object) => req<any>("/api/ingest", { method: "POST", body: JSON.stringify(body) }),
   refreshModel: (id: string) => req<any>(`/api/mental-models/${id}/refresh`, { method: "POST" }),
   narrative: () => req<any>("/api/demo/narrative"),
+  memoryRetain: (body: object) => req<any>("/api/memory/retain", { method: "POST", body: JSON.stringify(body) }),
+  memoryRecall: (body: object) => req<any>("/api/memory/recall", { method: "POST", body: JSON.stringify(body) }),
 };

@@ -12,7 +12,7 @@ export default function ActivityPage() {
 
   return (
     <div className="p-8 max-w-[1000px]">
-      <PageHeader title="Agent Activity" subtitle="Observability for graph, memory, reflect, and LLM stages" />
+      <PageHeader title="Agent Activity" subtitle="OpenClaw and legacy runs. Tool arguments are redacted of secrets." />
       {runs.length === 0 ? (
         <EmptyState title="No executions yet" body="Run a question in Audit Assistant or reconstruct a historical state." />
       ) : (
@@ -21,7 +21,7 @@ export default function ActivityPage() {
             <Panel key={r.id} className="p-4">
               <div className="flex justify-between text-[13px]">
                 <div className="font-medium">{r.query}</div>
-                <div className="font-mono text-ink-400">{r.total_ms}ms</div>
+                <div className="font-mono text-ink-400">{r.total_ms}ms · {r.status}</div>
               </div>
               <div className="mt-3 space-y-1">
                 {r.stages.map((s) => (

@@ -6,6 +6,7 @@ from time import perf_counter
 from typing import Any, Callable
 
 from app.data import demo
+from app.identity import current_user, memories_for_tenant
 from app.logging_util import agent_log
 
 
@@ -27,14 +28,13 @@ class AgentToolbox:
         self.s = services
 
     def search_neo4j(self, query: str = "", valid_as_of: str | None = None, system_as_of: str | None = None) -> dict[str, Any]:
+        from app.agents.planner import extract_entity_id
+
         t0 = perf_counter()
         agent_log("NEO4J", "Query started")
         vd = _parse_date(valid_as_of, date(2025, 7, 15))
         sd = _parse_date(system_as_of, vd)
-        entity = None
-        q = (query or "").upper()
-        if "CC6.1" in q or "MFA" in q:
-            entity = "CC6.1"
+        entity = extract_entity_id(query or "")
         payload = self.s.neo4j.graph(entity, vd, sd, None)
         agent_log("NEO4J", f"{len(payload.nodes)} nodes returned")
         return {
@@ -57,9 +57,16 @@ class AgentToolbox:
             "ms": _ms(t0),
         }
 
-    def traverse_compliance_graph(self, start_id: str = "CC6.1") -> dict[str, Any]:
+    def traverse_compliance_graph(
+        self,
+        start_id: str,
+        valid_as_of: str | None = None,
+        system_as_of: str | None = None,
+    ) -> dict[str, Any]:
         t0 = perf_counter()
-        payload = self.s.neo4j.graph(start_id, date(2025, 7, 15), date(2025, 7, 15), None)
+        vd = _parse_date(valid_as_of, date(2025, 7, 15))
+        sd = _parse_date(system_as_of, vd)
+        payload = self.s.neo4j.graph(start_id, vd, sd, None)
         path = [n.id for n in payload.nodes]
         ordered = [i for i in demo.CAUSAL_PATH if i in {n.id for n in payload.nodes}] or path[:8]
         return {
@@ -79,56 +86,120 @@ class AgentToolbox:
         sd = _parse_date(system_as_of, vd or date(2025, 7, 15)) if system_as_of else vd
         recalled = self.s.hindsight.recall(query, valid_as_of=vd, system_as_of=sd)
         facts = recalled.get("facts") or []
-        agent_log("HINDSIGHT", f"{len(facts)} memories returned")
-        return {"tool": "search_hindsight", "memories": facts[:12], "count": len(facts), "ms": _ms(t0)}
+        if not facts and recalled.get("results"):
+            from app.services.hindsight_service import normalize_recall
 
-    def reconstruct_historical_state(self, as_of: str) -> dict[str, Any]:
-        t0 = perf_counter()
-        day = _parse_date(as_of, date(2025, 5, 15))
-        events = [e for e in demo.TIMELINE if demo.occurred_by(e, day, day)]
-        evidence_known = [e for e in demo.EVIDENCE if demo.visible_at(e, day, day)]
-        evidence_future = [e for e in demo.EVIDENCE if e.system_start and e.system_start > day]
-        findings = [f for f in demo.FINDINGS if demo.visible_at(f, day, day)]
-        mfa_gap = any(e.id == "t-iam" for e in events) and not any(e.id == "t-fix" for e in events)
-        remediated = any(e.id == "t-test-pass" for e in events)
-        if remediated:
-            status, label = "compliant", "COMPLIANT"
-        elif mfa_gap:
-            status, label = "at_risk", "PARTIALLY COMPLIANT"
-        else:
-            status, label = "compliant", "COMPLIANT"
-        controls = []
-        for c in demo.CONTROLS:
-            known = demo.visible_at(c, day, day)
-            st = c.status
-            if c.id == "CC6.1" and mfa_gap:
-                st = "non_compliant"
-            if c.id == "CC6.1" and remediated:
-                st = "compliant"
-            controls.append({"id": c.id, "name": c.name, "status": st, "known": known})
+            recalled = normalize_recall(recalled)
+            facts = recalled.get("facts") or []
+        facts = memories_for_tenant(facts, current_user().tenant_id)
+        agent_log("HINDSIGHT", f"{len(facts)} memories returned source={recalled.get('source')}")
         return {
-            "tool": "reconstruct_historical_state",
-            "as_of": day.isoformat(),
-            "compliance_status": status,
-            "label": label,
-            "controls": controls,
-            "open_findings": [f.model_dump(mode="json") for f in findings if f.status != "remediated" or (f.valid_end and f.valid_end >= day)],
-            "known_evidence": [e.id for e in evidence_known],
-            "unknown_future_evidence": [e.id for e in evidence_future],
-            "events": [e.model_dump(mode="json") for e in events],
+            "tool": "search_hindsight",
+            "memories": facts[:12],
+            "count": len(facts),
+            "source": recalled.get("source"),
             "ms": _ms(t0),
         }
 
-    def get_evidence(self, entity_id: str | None = None, system_as_of: str | None = None) -> dict[str, Any]:
+    def reconstruct_historical_state(
+        self,
+        as_of: str | None = None,
+        valid_as_of: str | None = None,
+        system_as_of: str | None = None,
+    ) -> dict[str, Any]:
+        from app.services.temporal_engine import reconstruct_from_graph
+
         t0 = perf_counter()
-        day = _parse_date(system_as_of, date(2025, 7, 15))
-        items = [e for e in demo.EVIDENCE if e.system_start <= day]
-        if entity_id:
-            items = [e for e in items if e.entity_id == entity_id or entity_id in e.id]
+        vd = _parse_date(valid_as_of or as_of, date(2025, 7, 15))
+        sd = _parse_date(system_as_of, vd)
+        payload = self.s.neo4j.graph(None, vd, sd, None)
+        out = reconstruct_from_graph(payload.nodes, vd, sd)
+        later = self.s.neo4j.graph(None, date(2025, 12, 31), date(2025, 12, 31), None)
+        known = {n.id for n in payload.nodes}
+        out["unknown_future_evidence"] = [
+            n.id for n in later.nodes if n.type == "Evidence" and n.id not in known
+        ]
+        out["cypher"] = getattr(self.s.neo4j, "last_cypher", "")
+        out["ms"] = _ms(t0)
+        return out
+
+    def get_evidence(
+        self,
+        entity_id: str | None = None,
+        system_as_of: str | None = None,
+        valid_as_of: str | None = None,
+    ) -> dict[str, Any]:
+        from app.services.temporal_engine import classify_evidence_role
+
+        t0 = perf_counter()
+        vd = _parse_date(valid_as_of or system_as_of, date(2025, 7, 15))
+        sd = _parse_date(system_as_of, vd)
+        payload = self.s.neo4j.graph(entity_id, vd, sd, None) if entity_id else self.s.neo4j.graph(None, vd, sd, None)
+        items = [n for n in payload.nodes if n.type == "Evidence"]
+        records = []
+        for n in items[:16]:
+            records.append(
+                {
+                    **n.model_dump(mode="json"),
+                    "role": classify_evidence_role(n, set()),
+                }
+            )
+        return {"tool": "get_evidence", "count": len(records), "records": records, "ms": _ms(t0), "source": "neo4j"}
+
+    def retain_memory(self, content: str, context: str = "operator") -> dict[str, Any]:
+        t0 = perf_counter()
+        text = content
+        lower = content.lower()
+        if lower.startswith("remember that"):
+            text = content[len("Remember that") :].strip() if content[:1].isupper() else content.split(" ", 1)[-1]
+            if lower.startswith("remember that"):
+                idx = lower.find("remember that")
+                text = content[idx + len("remember that") :].strip()
+        out = self.s.hindsight.retain(
+            content=text,
+            context=context,
+            timestamp=date.today().isoformat(),
+            document_id=None,
+            metadata={"tenant_id": current_user().tenant_id, "fact_type": "operator_retain"},
+        )
+        live = bool((out.get("live") or {}).get("ok")) if isinstance(out.get("live"), dict) else self.s.hindsight.is_live()
+        return {"tool": "retain_memory", "retained": out, "live": live, "text": text, "ms": _ms(t0)}
+
+    def reflect_memory(self, query: str, valid_as_of: str | None = None, system_as_of: str | None = None) -> dict[str, Any]:
+        t0 = perf_counter()
+        vd = date.fromisoformat(valid_as_of) if valid_as_of else None
+        sd = date.fromisoformat(system_as_of) if system_as_of else None
+        out = self.s.hindsight.reflect(query, valid_as_of=vd, system_as_of=sd)
+        return {"tool": "reflect_memory", **out, "ms": _ms(t0)}
+
+    def compare_temporal_states(
+        self,
+        question: str = "",
+        valid_from: str | None = None,
+        valid_to: str | None = None,
+        system_as_of: str | None = None,
+    ) -> dict[str, Any]:
+        from app.services.temporal_engine import compare_graphs, reconstruct_from_graph
+        from app.temporal import extract_dates_from_text
+
+        t0 = perf_counter()
+        dates = extract_dates_from_text(question)
+        a = _parse_date(valid_from or (dates[0].isoformat() if dates else None), date(2025, 5, 15))
+        b = _parse_date(valid_to or (dates[1].isoformat() if len(dates) > 1 else None), date(2025, 6, 25))
+        sysd = _parse_date(system_as_of, b)
+        g1 = self.s.neo4j.graph(None, a, a, None)
+        g2 = self.s.neo4j.graph(None, b, sysd, None)
+        diff = compare_graphs(g1.nodes, g2.nodes)
+        r1 = reconstruct_from_graph(g1.nodes, a, a)
+        r2 = reconstruct_from_graph(g2.nodes, b, sysd)
         return {
-            "tool": "get_evidence",
-            "count": len(items),
-            "records": [e.model_dump(mode="json") for e in items[:12]],
+            "tool": "compare_temporal_states",
+            "from": a.isoformat(),
+            "to": b.isoformat(),
+            "system_as_of": sysd.isoformat(),
+            "diff": diff,
+            "before": r1["label"],
+            "after": r2["label"],
             "ms": _ms(t0),
         }
 
@@ -199,5 +270,8 @@ GROQ_TOOLS = [
         ("get_evidence", "List evidence known at system time", {"entity_id": {"type": "string"}, "system_as_of": {"type": "string"}}),
         ("analyze_compliance", "Synthesize posture/gaps/diff from retrieved evidence", {"question": {"type": "string"}, "as_of": {"type": "string"}}),
         ("get_control_status", "Status of a control at a date", {"control_id": {"type": "string"}, "as_of": {"type": "string"}}),
+        ("retain_memory", "Persist an operator fact into Hindsight", {"content": {"type": "string"}, "context": {"type": "string"}}),
+        ("reflect_memory", "Synthesize historical memory", {"query": {"type": "string"}}),
+        ("compare_temporal_states", "Diff two valid-time states", {"question": {"type": "string"}, "valid_from": {"type": "string"}, "valid_to": {"type": "string"}}),
     ]
 ]

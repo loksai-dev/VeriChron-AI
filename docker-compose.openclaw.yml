@@ -1,0 +1,3 @@
+# OpenClaw stays on the host loopback (gateway.bind=loopback).
+# Do not publish 18789 publicly. Backend on the host uses OPENCLAW_GATEWAY_URL=http://127.0.0.1:18789.
+services: {}

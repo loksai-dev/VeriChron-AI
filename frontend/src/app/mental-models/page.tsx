@@ -18,7 +18,7 @@ export default function MentalModelsPage() {
 
   return (
     <div className="p-8 max-w-[1200px]">
-      <PageHeader title="Mental Models" subtitle="Hindsight layer 1 — curated answers refreshed as evidence arrives" />
+      <PageHeader title="Mental Models" subtitle="Derived from Hindsight recall + graph findings. Seeded catalog remains labeled until Cloud refresh succeeds." />
       <div className="grid grid-cols-2 gap-3 mb-8">
         {(data?.models || []).map((m: any) => (
           <Panel key={m.id} className="p-5 cursor-pointer hover:bg-white/[0.02]" onClick={() => setOpen(m)}>

@@ -23,6 +23,10 @@ ALLOWED_RELS = {
     "CAUSES",
     "ENABLES",
     "EVALUATED_BY",
+    "AFFECTS",
+    "CONTRADICTS",
+    "HAS_VERSION",
+    "DOCUMENTS",
 }
 
 
@@ -183,7 +187,8 @@ class RealNeo4jService:
                         n.valid_start = $vs,
                         n.valid_end = $ve,
                         n.system_start = $ss,
-                        n.system_end = $se
+                        n.system_end = $se,
+                        n.tenant_id = $tenant
                     """,
                     id=node.id,
                     name=node.name,
@@ -196,6 +201,7 @@ class RealNeo4jService:
                     ve=_iso(node.valid_end),
                     ss=_iso(node.system_start),
                     se=_iso(node.system_end),
+                    tenant="acme",
                 )
                 session.run(
                     f"MATCH (n:Entity {{id: $id}}) SET n:{node.type}",

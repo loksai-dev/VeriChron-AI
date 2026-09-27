@@ -94,7 +94,7 @@ class IngestionPipeline:
         )
         model = None
         try:
-            model = self.s.hindsight.refresh_mental_model("mm:soc2-access")
+            model = self.s.hindsight.refresh_mental_model("mm:soc2-cc61")
         except Exception:
             pass
 

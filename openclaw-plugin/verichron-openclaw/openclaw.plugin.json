@@ -1,0 +1,25 @@
+{
+  "id": "verichron-openclaw",
+  "name": "VeriChron compliance tools",
+  "description": "Read-only Neo4j/temporal tools backed by FastAPI. No unrestricted Cypher or shell.",
+  "categories": ["other"],
+  "contracts": {
+    "tools": [
+      "search_compliance_graph",
+      "traverse_control",
+      "reconstruct_state",
+      "compare_states",
+      "get_evidence",
+      "analyze_evidence"
+    ]
+  },
+  "activation": { "onStartup": true },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiBase": { "type": "string" },
+      "toolTokenEnv": { "type": "string" }
+    }
+  }
+}

@@ -56,16 +56,31 @@ class Services:
                 self.seeded_nodes = count
                 agent_log("NEO4J", f"Graph already populated ({count} nodes)")
 
-        for url in (settings.hindsight_url, "http://127.0.0.1:8888", "http://localhost:8888"):
+        hindsight_urls: list[str] = []
+        if settings.hindsight_api_key:
+            cloud = settings.hindsight_url.strip() or "https://api.hindsight.vectorize.io"
+            if "hindsight:" in cloud or cloud.startswith("http://localhost") or cloud.startswith("http://127."):
+                cloud = "https://api.hindsight.vectorize.io"
+            hindsight_urls.append(cloud)
+        else:
+            hindsight_urls.extend(
+                [settings.hindsight_url, "http://127.0.0.1:8888", "http://localhost:8888"]
+            )
+        seen: set[str] = set()
+        for url in hindsight_urls:
+            if not url or url in seen:
+                continue
+            seen.add(url)
             try:
-                real_h = RealHindsightService(url, settings.hindsight_bank_id)
-                if real_h.is_live():
-                    self.hindsight = real_h
-                    self.modes["hindsight"] = "live"
-                    break
+                real_h = RealHindsightService(url, settings.hindsight_bank_id, settings.hindsight_api_key)
                 self.hindsight = real_h
-            except Exception:
-                pass
+                if real_h.is_live():
+                    self.modes["hindsight"] = "live"
+                    agent_log("HINDSIGHT", real_h.status()[1])
+                    break
+                self.modes["hindsight"] = "disconnected"
+            except Exception as exc:
+                agent_log("HINDSIGHT", f"{url} failed: {exc}")
         self.hindsight.seed_bank()
 
         if settings.groq_api_key:
@@ -78,23 +93,55 @@ class Services:
             except Exception:
                 pass
 
+    def _openclaw_health(self) -> dict:
+        from app.openclaw.client import OpenClawGatewayClient
+
+        if not self.settings.openclaw_enabled:
+            return {"status": "disabled", "detail": "OPENCLAW_ENABLED=false"}
+        return OpenClawGatewayClient(self.settings).health()
+
     def health_payload(self) -> dict:
         n_ok, n_d = self.neo4j.status()
         h_ok, h_d = self.hindsight.status()
         l_ok, l_d = self.llm.status()
         n_live = getattr(self.neo4j, "is_live", lambda: False)()
         h_live = getattr(self.hindsight, "is_live", lambda: False)()
+        class_ok = getattr(self.llm, "classification_ok", None)
+        class_err = getattr(self.llm, "classification_error", "")
+        groq_reason = "healthy" if l_ok and self.modes["llm"] == "live" else "disconnected"
+        groq_class = "healthy" if class_ok else ("unavailable" if class_ok is False else "not_probed")
+        hindsight_mode = "live" if h_live else ("MOCK MODE" if self.modes["hindsight"] == "mock" else "disconnected")
+        overall = "healthy" if n_live and h_live else "degraded"
+        oc = self._openclaw_health()
+        if self.settings.openclaw_enabled and oc.get("status") != "connected":
+            overall = "degraded"
         return {
+            "status": overall,
             "neo4j": "connected" if n_live else "disconnected",
             "hindsight": "connected" if h_live else "disconnected",
+            "hindsight_mode": hindsight_mode,
+            "openclaw": oc.get("status"),
+            "orchestrator": "openclaw" if self.settings.openclaw_enabled else "legacy",
             "groq": "connected" if l_ok and self.modes["llm"] == "live" else "disconnected",
             "agent": "ready",
             "demo_mode": self.settings.demo_mode,
+            "tenant_id": self.settings.tenant_id,
             "seeded_nodes": self.seeded_nodes or len(demo.NODES),
-            "details": {"neo4j": n_d, "hindsight": h_d, "groq": l_d},
-            "services": [
+            "details": {"neo4j": n_d, "hindsight": h_d, "groq": l_d, "openclaw": oc.get("detail")},
+            "services": {
+                "neo4j": {"status": "healthy" if n_live else "down", "detail": n_d},
+                "hindsight": {"status": "healthy" if h_live else "down", "bank": self.settings.hindsight_bank_id, "detail": h_d, "mode": hindsight_mode},
+                "groq": {
+                    "reasoning": groq_reason,
+                    "classification": groq_class,
+                    "classification_error": class_err,
+                    "detail": l_d,
+                },
+                "openclaw": oc,
+            },
+            "legacy_services": [
                 ServiceStatus(name="Neo4j", mode=self.modes["neo4j"], healthy=n_ok, detail=n_d).model_dump(),
-                ServiceStatus(name="Hindsight", mode=self.modes["hindsight"], healthy=h_ok, detail=h_d).model_dump(),
+                ServiceStatus(name="Hindsight", mode=self.modes["hindsight"], healthy=h_ok and h_live, detail=h_d).model_dump(),
                 ServiceStatus(name="LLM", mode=self.modes["llm"], healthy=l_ok, detail=l_d).model_dump(),
             ],
         }

@@ -66,6 +66,10 @@ NODES: list[GraphNode] = [
     N(id="REM-UAR", type="Remediation", name="Upload Access Review Evidence", description="Export Q2 CSV into VeriChron.", status="in_progress", owner="Jordan Hale", sources=["seed"], valid_start=d(2025, 6, 15), system_start=d(2025, 7, 15)),
     N(id="SEC-1842", type="JiraTicket", name="SEC-1842 Enable MFA", description="Restore aws:MultiFactorAuthPresent on prod-admins.", status="done", owner="Priya Shah", sources=["jira"], valid_start=d(2025, 5, 12), valid_end=d(2025, 6, 20), system_start=d(2025, 5, 12)),
     N(id="person:priya", type="Person", name="Priya Shah", description="Staff identity engineer.", status="active", sources=["hris"], valid_start=d(2021, 4, 1), system_start=d(2024, 11, 1)),
+    N(id="EXC-MFA", type="Exception", name="MFA exception (legacy auth)", description="Approved June 20 2025 for remaining legacy authentication dependency. Affects CC6.1 residual risk.", status="approved", owner="Security", sources=["seed"], valid_start=d(2025, 6, 20), system_start=d(2025, 6, 20)),
+    N(id="EV-CONFLICT", type="Evidence", name="Vendor attestation: MFA always on", description="Third-party letter claiming prod-admins always required MFA — contradicts CloudTrail and failed control test.", status="disputed", sources=["vendor"], valid_start=d(2025, 5, 1), system_start=d(2025, 5, 20)),
+    N(id="AUD-Q2", type="Audit", name="Q2 2025 internal audit", description="Internal audit covering CC6.1 logical access.", status="closed", sources=["internal-audit"], valid_start=d(2025, 5, 1), system_start=d(2025, 5, 12)),
+    N(id="POL-MFA-V2025", type="PolicyVersion", name="MFA Access Policy 2025 v1", description="Versioned policy artifact for POL-MFA.", status="active", sources=["seed"], valid_start=d(2025, 1, 1), valid_end=d(2025, 6, 30), system_start=d(2025, 1, 1)),
 ]
 
 EDGES: list[GraphEdge] = [
@@ -106,6 +110,12 @@ EDGES: list[GraphEdge] = [
     E(id="e-res-mfa", source="REM-MFA", target="F-MFA", type="RESOLVES", valid_start=d(2025, 6, 20), system_start=d(2025, 6, 20)),
     E(id="e-cause", source="F-MFA", target="F-UAR", type="CAUSES", valid_start=d(2025, 6, 15), system_start=d(2025, 7, 15)),
     E(id="e-jira-en", source="SEC-1842", target="REM-MFA", type="ENABLES", valid_start=d(2025, 5, 12), system_start=d(2025, 5, 12)),
+    E(id="e-eval-fail", source="CC6.1", target="EV-TEST-FAIL", type="EVALUATED_BY", valid_start=d(2025, 5, 5), system_start=d(2025, 5, 5)),
+    E(id="e-eval-pass", source="CC6.1", target="EV-TEST-PASS", type="EVALUATED_BY", valid_start=d(2025, 6, 25), system_start=d(2025, 6, 25)),
+    E(id="e-exc-aff", source="EXC-MFA", target="CC6.1", type="AFFECTS", valid_start=d(2025, 6, 20), system_start=d(2025, 6, 20)),
+    E(id="e-contra", source="EV-CONFLICT", target="EV-TEST-FAIL", type="CONTRADICTS", valid_start=d(2025, 5, 1), system_start=d(2025, 5, 20)),
+    E(id="e-ver", source="POL-MFA", target="POL-MFA-V2025", type="HAS_VERSION", valid_start=d(2025, 1, 1), system_start=d(2025, 1, 1)),
+    E(id="e-audit", source="AUD-Q2", target="F-MFA", type="DOCUMENTS", valid_start=d(2025, 5, 12), system_start=d(2025, 5, 12)),
 ]
 
 CAUSAL_PATH = ["REQ-CC6.1", "CC6.1", "AWS-IAM", "EV-CT-MFA", "EV-TEST-FAIL", "F-MFA", "SEC-1842", "REM-MFA"]

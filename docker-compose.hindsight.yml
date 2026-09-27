@@ -1,0 +1,15 @@
+# Optional self-hosted Hindsight
+#
+# VeriChron's primary path is Hindsight Cloud:
+#   HINDSIGHT_URL=https://api.hindsight.vectorize.io
+#   HINDSIGHT_API_KEY=  (never commit)
+#   HINDSIGHT_BANK_ID=  (UUID from Cloud)
+#
+# Full local stack (Neo4j + API + UI): docker compose -f docker-compose.yml up
+# This file does not start Cloud Hindsight (SaaS). Enable the profile only as a reminder.
+
+services:
+  hindsight-cloud-note:
+    image: alpine:3.20
+    profiles: ["docs"]
+    command: ["echo", "Set HINDSIGHT_URL and HINDSIGHT_API_KEY in .env"]

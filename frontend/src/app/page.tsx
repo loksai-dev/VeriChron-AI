@@ -22,11 +22,11 @@ export default function OverviewPage() {
 
   const m = data.metrics;
   const cards = [
-    { k: "Overall compliance", v: `${Math.round(m.overall_compliance * 100)}%`, s: "SOC 2" },
-    { k: "Active controls", v: m.active_controls, s: "in scope" },
-    { k: "Open findings", v: m.open_findings, s: `${m.critical_findings} critical` },
-    { k: "Pending remediations", v: m.pending_remediations, s: "tracked" },
-    { k: "Evidence coverage", v: `${Math.round(m.evidence_coverage * 100)}%`, s: "mapped" },
+    { k: "Overall compliance", v: `${Math.round(m.overall_compliance * 100)}%`, s: data.source || "graph", href: "/controls" },
+    { k: "Active controls", v: m.active_controls, s: "in scope", href: "/controls" },
+    { k: "Open findings", v: m.open_findings, s: `${m.critical_findings} critical`, href: "/findings" },
+    { k: "Pending remediations", v: m.pending_remediations, s: "tracked", href: "/findings" },
+    { k: "Evidence coverage", v: `${Math.round(m.evidence_coverage * 100)}%`, s: `${data.evidence_count ?? "?"} records`, href: "/evidence" },
   ];
 
   return (
@@ -45,7 +45,7 @@ export default function OverviewPage() {
       </p>
       <div className="grid grid-cols-5 gap-3 mb-6">
         {cards.map((c) => (
-          <Panel key={c.k} className="p-4">
+          <Panel key={c.k} className="p-4 cursor-pointer hover:bg-white/[0.02]" onClick={() => router.push(c.href)}>
             <div className="text-[11px] uppercase tracking-wide text-ink-400">{c.k}</div>
             <div className="text-[26px] mt-2 tracking-tight">{c.v}</div>
             <div className="text-[12px] text-ink-400 mt-1">{c.s}</div>
@@ -62,7 +62,7 @@ export default function OverviewPage() {
         <div className="h-56">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data.series}>
-              <XAxis dataKey="date" tick={{ fill: "#8a867c", fontSize: 11 }} tickFormatter={(v) => v.slice(0, 7)} axisLine={false} tickLine={false} />
+              <XAxis dataKey="date" tick={{ fill: "#8a867c", fontSize: 11 }} tickFormatter={(v) => (v ? String(v).slice(0, 7) : "")} axisLine={false} tickLine={false} />
               <YAxis domain={[60, 100]} tick={{ fill: "#8a867c", fontSize: 11 }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={{ background: "#161614", border: "1px solid rgba(255,255,255,0.08)", fontSize: 12 }} />
               <Area type="monotone" dataKey="compliance" name="Valid time" stroke="#1f7a4d" fill="#1f7a4d" fillOpacity={0.15} />

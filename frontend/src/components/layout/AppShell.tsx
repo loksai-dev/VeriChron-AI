@@ -85,7 +85,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="uppercase tracking-wide mb-1">System status</div>
             <div className="flex justify-between"><span>DEMO MODE</span><span className={health?.demo_mode ? "text-status-info" : "text-ink-400"}>{health?.demo_mode ? "on" : "off"}</span></div>
             <div className="flex justify-between"><span>Neo4j</span><span className={health?.neo4j === "connected" ? "text-status-ok" : "text-status-warn"}>{health?.neo4j || "…"}</span></div>
-            <div className="flex justify-between"><span>Hindsight</span><span className={health?.hindsight === "connected" ? "text-status-ok" : "text-status-warn"}>{health?.hindsight || "…"}</span></div>
+            <div className="flex justify-between"><span>OpenClaw</span><span className={health?.openclaw === "connected" || health?.services?.openclaw?.status === "connected" ? "text-status-ok" : "text-status-warn"}>{health?.services?.openclaw?.status || health?.openclaw || "…"}</span></div>
+            <div className="flex justify-between"><span>Hindsight</span><span className={health?.hindsight === "connected" ? "text-status-ok" : "text-status-warn"}>{health?.hindsight_mode === "MOCK MODE" ? "MOCK MODE" : (health?.hindsight || "…")}</span></div>
             <div className="flex justify-between"><span>Groq</span><span className={health?.groq === "connected" ? "text-status-ok" : "text-status-warn"}>{health?.groq || "…"}</span></div>
           </div>
         </div>
