@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0f0f0e;
+  --panel: #161614;
+  --line: rgba(255, 255, 255, 0.07);
+}
+
+html,
+body {
+  background: var(--bg);
+  color: #eceae4;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3c3a36 transparent;
+}
+
+.grid-fine {
+  background-image: linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
