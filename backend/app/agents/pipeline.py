@@ -350,6 +350,12 @@ class ComplianceAgent:
                 f"World state {req.valid_as_of.isoformat()} / knowledge {req.system_as_of.isoformat()}. "
                 f"{out['label']}. Source={out.get('source')}."
             ),
+            "mfa_policy": {
+                "label": "MFA Policy",
+                "active": "Jan 1 - Jun 30 2025" if req.valid_as_of <= date(2025, 6, 30) else "Expired / Superseded",
+                "evidence_recorded": "Jul 15 2025",
+                "known": req.system_as_of >= date(2025, 1, 1),
+            },
             "controls": out["controls"],
             "findings": out["open_findings"],
             "evidence": known_ev,

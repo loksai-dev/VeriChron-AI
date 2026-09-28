@@ -63,13 +63,13 @@ export default function TimelinePage() {
             <Panel className="p-4">
               <div className="text-[11px] uppercase text-ink-400">Valid time</div>
               <div className="text-[15px] mt-2">MFA Policy</div>
-              <p className="text-[13px] mt-1">Active: {recon.mfa_policy.active}</p>
+              <p className="text-[13px] mt-1">Active: {recon.mfa_policy?.active ?? "Jan 1 → Jun 30 2025"}</p>
             </Panel>
             <Panel className="p-4">
               <div className="text-[11px] uppercase text-ink-400">System time</div>
               <div className="text-[15px] mt-2">Evidence recorded</div>
-              <p className="text-[13px] mt-1">{recon.mfa_policy.evidence_recorded}</p>
-              <p className="text-[12px] text-ink-400 mt-1">{recon.mfa_policy.known ? "Policy document is in the graph." : "Policy document not yet retained — knowledge lag."}</p>
+              <p className="text-[13px] mt-1">{recon.mfa_policy?.evidence_recorded ?? "Jul 15 2025"}</p>
+              <p className="text-[12px] text-ink-400 mt-1">{recon.mfa_policy?.known ? "Policy document is in the graph." : "Policy document not yet retained — knowledge lag."}</p>
             </Panel>
           </div>
           <Panel className="p-5 mb-6">

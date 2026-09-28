@@ -1,9 +1,11 @@
 # VeriChron AI Documentation
 
-Documentation for the **current** repository implementation. Claims are grounded in source files under `backend/` and `frontend/`. Incomplete items are labeled **PARTIAL** or **NOT IMPLEMENTED**.
+> **Master Architecture Guide**: [../PROJECT_DOCUMENTATION.md](../PROJECT_DOCUMENTATION.md)  
+> Complete technical specification covering bitemporal theory, multi-agent orchestration, Hindsight Cloud memory, Neo4j graphs, API schemas, and deployment.
 
 ## Quick start
 
+- [Master Project Documentation](../PROJECT_DOCUMENTATION.md)
 - [20 Local development](20_LOCAL_DEVELOPMENT.md)
 - [19 Docker](19_DOCKER_DEPLOYMENT.md)
 - [18 Configuration](18_CONFIGURATION.md)
@@ -17,6 +19,14 @@ Documentation for the **current** repository implementation. Claims are grounded
 - [11 Frontend](11_FRONTEND_ARCHITECTURE.md)
 - [29 Architecture decisions](29_ARCHITECTURE_DECISIONS.md)
 - [30 Project structure](30_PROJECT_STRUCTURE.md)
+
+## OpenClaw Multi-Agent Gateway
+
+- [OpenClaw Architecture](OPENCLAW_ARCHITECTURE.md)
+- [OpenClaw Setup](OPENCLAW_SETUP.md)
+- [OpenClaw Tools](OPENCLAW_TOOLS.md)
+- [OpenClaw Acceptance](OPENCLAW_ACCEPTANCE.md)
+- [OpenClaw Demo](OPENCLAW_DEMO.md)
 
 ## Agent
 
@@ -59,7 +69,7 @@ Documentation for the **current** repository implementation. Claims are grounded
 ## Development
 
 - [01 Product requirements](01_PRODUCT_REQUIREMENTS.md)
-- [21 Testing](21_TESTING.md) — **NOT IMPLEMENTED** (no project test suite)
+- [21 Testing](21_TESTING.md) — **IMPLEMENTED** (pytest suite in `tests/` with unit, integration, and e2e)
 - [22 Troubleshooting](22_TROUBLESHOOTING.md)
 - [23 Security](23_SECURITY.md)
 - [24 Limitations](24_LIMITATIONS.md)

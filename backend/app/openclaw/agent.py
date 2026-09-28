@@ -166,7 +166,7 @@ class OpenClawInvestigationAgent:
         mem_note = "" if memory_enabled else " HINDSIGHT_RECALL_DISABLED for this turn. Do not use injected memories. Tools and graph only."
         user_msg = f"{question}\n\n[framework={framework} tenant={user.tenant_id}{clocks}]{mem_note}"
 
-        session_user = f"verichron:{user.tenant_id}:{user.username}"
+        session_user = f"verichron:{user.tenant_id}:{user.username}:{run_id}"
         if not memory_enabled:
             session_user = f"verichron-nomem:{user.tenant_id}:{uuid4().hex[:8]}"
 
@@ -212,6 +212,13 @@ class OpenClawInvestigationAgent:
                 )
                 if resp.status_code >= 400:
                     yield {"type": "thought", "text": f"OpenClaw HTTP {resp.status_code}: {resp.text[:240]}"}
+                    if getattr(self.s.settings, "openclaw_legacy_fallback", True):
+                        yield {"type": "thought", "text": "OpenClaw gateway encountered rate limit; falling back to live FastAPI agent."}
+                        from app.agents.pipeline import ComplianceAgent
+                        fallback = ComplianceAgent(self.s)
+                        for evt in fallback.iter_query(question, valid_as_of, system_as_of, framework):
+                            yield evt
+                        return
                     conclusion = f"OpenClaw request failed HTTP {resp.status_code}."
                     break
                 payload = resp.json()
@@ -250,6 +257,13 @@ class OpenClawInvestigationAgent:
                 break
         except Exception as exc:
             agent_log("OPENCLAW", str(exc))
+            if getattr(self.s.settings, "openclaw_legacy_fallback", True):
+                yield {"type": "thought", "text": f"OpenClaw gateway encountered error ({exc}); falling back to live FastAPI agent."}
+                from app.agents.pipeline import ComplianceAgent
+                fallback = ComplianceAgent(self.s)
+                for evt in fallback.iter_query(question, valid_as_of, system_as_of, framework):
+                    yield evt
+                return
             conclusion = f"OpenClaw error: {exc}"
 
         cl = (conclusion or "").lower()

@@ -17,6 +17,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Brain,
+  BookOpen,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
@@ -34,6 +35,7 @@ const NAV = [
   { href: "/assistant", label: "Audit Assistant", icon: MessageSquare },
   { href: "/mental-models", label: "Mental Models", icon: Brain },
   { href: "/activity", label: "Agent Activity", icon: Activity },
+  { href: "/docs", label: "Documentation", icon: BookOpen },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {

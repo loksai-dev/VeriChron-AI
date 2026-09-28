@@ -2,6 +2,9 @@
 
 **Bitemporal Governance & Audit Intelligence**
 
+> **Comprehensive Documentation**: See [PROJECT_DOCUMENTATION.md](PROJECT_DOCUMENTATION.md) for the complete 14-section master architectural guide, bitemporal mathematics, API schemas, and deployment runbooks.  
+> **Interactive Documentation**: Available in-app at [http://localhost:3000/docs](http://localhost:3000/docs).
+
 VeriChron AI does not just tell you what your compliance status is.
 
 It reconstructs what your compliance status **was**, what the organization **knew** at that time, and **why** the status changed.
@@ -10,8 +13,9 @@ This is a desktop-first enterprise console (Next.js + FastAPI) with:
 
 - Bitemporal facts (`valid_*` vs `system_*`)
 - Neo4j for explicit compliance relationships
-- Hindsight for long-term memory (`retain` / `recall` / `reflect` / `create_mental_model`)
-- Groq for reasoning (`openai/gpt-oss-120b`, `qwen/qwen3-32b`)
+- Hindsight Cloud for long-term memory (`retain` / `recall` / `reflect` / `create_mental_model`)
+- OpenClaw Gateway for multi-agent execution with zero-downtime failover
+- Groq for high-speed reasoning (`openai/gpt-oss-120b`, `llama-3.1-8b-instant`)
 - A deterministic **demo mode** so judges can run the full product with no external systems
 
 ```mermaid

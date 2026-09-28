@@ -93,6 +93,7 @@ class OpenClawGatewayClient:
             "messages": messages,
             "stream": stream,
             "tool_choice": tool_choice,
+            "max_tokens": 1500,
         }
         if tools:
             body["tools"] = tools
@@ -101,7 +102,6 @@ class OpenClawGatewayClient:
             headers=headers,
             json=body,
             timeout=self.timeout,
-            stream=stream,
         )
 
     def parse_sse_bytes(self, raw: bytes) -> Iterator[dict[str, Any]]:
